@@ -2,37 +2,86 @@
   import { onMount } from 'svelte';
   import * as GL from '@sveltejs/gl';
 
-  export let color = '#ff3e00';
-  let w = 1;
-  let h = 1;
-  let d = 1;
+  let rand = (min, max) => {
+    return min + (max - min) * Math.random();
+  }
+  // these are mostly bad colors
+  let rand_color = () => {
+    return Math.floor(Math.random() * 0x1000000);
+  }
 
-  const from_hex = hex => parseInt(hex.slice(1), 16);
+  let light = {};
+  let balls = [];
 
-  const light = {};
+  for(let i=0; i<10; i++) {
 
+    balls.push({
+      x: rand(-4, 4),
+      y: rand(0.5, 2),
+      z: rand(-4, 4),
+      dx: rand(-1, 1),
+      dy: rand(-1, 1),
+      dz: rand(-1, 1),
+      color: rand_color(),
+      sz: rand(0.2, 0.5),
+    });
+  }
   onMount(() => {
-  	let frame;
+    let frame;
 
-  	const loop = () => {
-  		frame = requestAnimationFrame(loop);
+    let loop = () => {
+      frame = requestAnimationFrame(loop);
 
-  		light.x = 3 * Math.sin(Date.now() * 0.001);
-  		light.y = 2.5 + 2 * Math.sin(Date.now() * 0.0004);
-  		light.z = 3 * Math.cos(Date.now() * 0.002);
-  	};
+      light.x = 3 * Math.sin(Date.now() * 0.001);
+      light.y = 2.5 + 2 * Math.sin(Date.now() * 0.0004);
+      light.z = 3 * Math.cos(Date.now() * 0.002);
 
-  	loop();
+      let dt = 0.02;
+      let g = 0.01;
+      let max_x = 5;
+      let min_x = -5;
+      let max_z = 5;
+      let min_z = -5;
 
-  	return () => cancelAnimationFrame(frame);
+      for (let ball of balls) {
+        // move
+        ball.x += dt * ball.dx;
+        ball.y += dt * ball.dy;
+        ball.z += dt * ball.dz;
+        // gravity
+        ball.dy -= g;
+        // bounce if hit a wall
+        if (ball.y - ball.sz <= ball.sz) {
+          ball.dy = Math.abs(ball.dy);
+        }
+        if (ball.x + ball.sz >= max_x) {
+          ball.dx = -Math.abs(ball.dx);
+        }
+        if (ball.x - ball.sz <= min_x) {
+          ball.dx = Math.abs(ball.dx);
+        }
+        if (ball.z + ball.sz >= max_z) {
+          ball.dz = -Math.abs(ball.dz);
+        }
+        if (ball.z - ball.sz <= min_z) {
+          ball.dz = Math.abs(ball.dz);
+        }
+      }
+      // tell svelte it updated
+      balls = balls;
+    };
+
+    loop();
+
+    return () => cancelAnimationFrame(frame);
   });
 </script>
 
 <GL.Scene>
-  <GL.Target id="center" location={[0, h/2, 0]}/>
+  <GL.Target id="center" location={[0, 0, 0]}/>
 
   <GL.OrbitControls maxPolarAngle={Math.PI / 2} let:location>
-  	<GL.PerspectiveCamera {location} lookAt="center" near={0.01} far={1000}/>
+    <GL.PerspectiveCamera {location} lookAt="center" near={0.01} far={1000}/>
   </GL.OrbitControls>
 
   <GL.AmbientLight intensity={0.3}/>
@@ -40,80 +89,40 @@
 
   <!-- floor -->
   <GL.Mesh
-  	geometry={GL.plane()}
-  	location={[0,-0.01,0]}
-  	rotation={[-90,0,0]}
-  	scale={10}
-  	uniforms={{ color: 0xffffff }}
-  />
-
-  <GL.Mesh
-  	geometry={GL.box()}
-  	location={[0,h/2,0]}
-  	rotation={[0,-20,0]}
-  	scale={[w,h,d]}
-  	uniforms={{ color: from_hex(color) }}
+    geometry={GL.plane()}
+    location={[0,-0.01,0]}
+    rotation={[-90,0,0]}
+    scale={10}
+    uniforms={{ color: 0xffffff }}
   />
 
   <!-- spheres -->
-  <GL.Mesh
-  	geometry={GL.sphere({ turns: 36, bands: 36 })}
-  	location={[-0.5, 0.4, 1.2]}
-  	scale={0.4}
-  	uniforms={{ color: 0x123456, alpha: 0.9 }}
-  	transparent
-  />
-
-  <GL.Mesh
-  	geometry={GL.sphere({ turns: 36, bands: 36 })}
-  	location={[-1.4, 0.6, 0.2]}
-  	scale={0.6}
-  	uniforms={{ color: 0x336644, alpha: 0.9 }}
-  	transparent
-  />
+  {#each balls as {x,y,z,color,sz}}
+    <GL.Mesh
+      geometry={GL.sphere({ turns: 36, bands: 36 })}
+      location={[x,y,z]}
+      scale={sz}
+      uniforms={{ color, alpha: 0.9 }}
+      transparent
+    />
+  {/each}
 
   <!-- moving light -->
   <GL.Group location={[light.x,light.y,light.z]}>
-  	<GL.Mesh
-  		geometry={GL.sphere({ turns: 36, bands: 36 })}
-  		location={[0,0.2,0]}
-  		scale={0.1}
-  		uniforms={{ color: 0xffffff, emissive: 0xcccc99 }}
-  	/>
+    <GL.Mesh
+      geometry={GL.sphere({ turns: 36, bands: 36 })}
+      location={[0,0.2,0]}
+      scale={0.1}
+      uniforms={{ color: 0xffffff, emissive: 0xcccc99 }}
+    />
 
-  	<GL.PointLight
-  		location={[0,0,0]}
-  		color={0xffffff}
-  		intensity={0.6}
-  	/>
+    <GL.PointLight
+      location={[0,0,0]}
+      color={0xffffff}
+      intensity={0.6}
+    />
   </GL.Group>
 </GL.Scene>
 
-<div class="controls">
-  <label>
-  	<input type="color" style="height: 40px" bind:value={color}>
-  </label>
-
-  <label>
-  	<input type="range" bind:value={w} min={0.1} max={5} step={0.1}> width ({w})
-  </label>
-
-  <label>
-  	<input type="range" bind:value={h} min={0.1} max={5} step={0.1}> height ({h})
-  </label>
-
-  <label>
-  	<input type="range" bind:value={d} min={0.1} max={5} step={0.1}> depth ({d})
-  </label>
-</div>
-
 <style>
-  .controls {
-  	position: absolute;
-  	top: 1em;
-  	left: 1em;
-  	background-color: rgba(255,255,255,0.7);
-  	padding: 1em;
-  	border-radius: 2px;
-  }
 </style>
